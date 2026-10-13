@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.policy
 
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.impl.CameraMetadataNative
@@ -25,6 +26,7 @@ import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.broadcast.BroadcastSender
 import com.android.systemui.dump.DumpManager
+import com.android.systemui.res.R
 import com.android.systemui.util.concurrency.FakeExecutor
 import com.android.systemui.util.mockito.argumentCaptor
 import com.android.systemui.util.mockito.capture
@@ -60,6 +62,9 @@ class FlashlightControllerImplTest : SysuiTestCase() {
     @Mock
     private lateinit var packageManager: PackageManager
 
+    @Mock
+    private lateinit var resources: Resources
+
     private lateinit var fakeSettings: FakeSettings
     private lateinit var fakeSystemClock: FakeSystemClock
     private lateinit var backgroundExecutor: FakeExecutor
@@ -75,6 +80,7 @@ class FlashlightControllerImplTest : SysuiTestCase() {
 
         `when`(packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH))
                 .thenReturn(true)
+        `when`(resources.getString(R.string.config_flashlight_camera_id)).thenReturn("")
 
         controller = FlashlightControllerImpl(
                 dumpManager,
@@ -82,7 +88,8 @@ class FlashlightControllerImplTest : SysuiTestCase() {
                 backgroundExecutor,
                 fakeSettings,
                 broadcastSender,
-                packageManager
+                packageManager,
+                resources
         )
     }
 
@@ -127,6 +134,30 @@ class FlashlightControllerImplTest : SysuiTestCase() {
 
         backgroundExecutor.runAllReady()
         verify(cameraManager).setTorchMode(id, enable)
+    }
+
+    @Test
+    fun testConfiguredCameraIsPreferred() {
+        val configuredId = "3"
+        val fallbackId = "0"
+        val configuredCamera = CameraCharacteristics(CameraMetadataNative().apply {
+            set(CameraCharacteristics.FLASH_INFO_AVAILABLE, true)
+            set(CameraCharacteristics.LENS_FACING, CameraCharacteristics.LENS_FACING_BACK)
+        })
+        val fallbackCamera = CameraCharacteristics(CameraMetadataNative().apply {
+            set(CameraCharacteristics.FLASH_INFO_AVAILABLE, true)
+            set(CameraCharacteristics.LENS_FACING, CameraCharacteristics.LENS_FACING_BACK)
+        })
+        `when`(resources.getString(R.string.config_flashlight_camera_id)).thenReturn(configuredId)
+        `when`(cameraManager.cameraIdList).thenReturn(arrayOf(fallbackId, configuredId))
+        `when`(cameraManager.getCameraCharacteristics(configuredId)).thenReturn(configuredCamera)
+        `when`(cameraManager.getCameraCharacteristics(fallbackId)).thenReturn(fallbackCamera)
+
+        backgroundExecutor.runAllReady()
+
+        verify(cameraManager).registerTorchCallback(eq(backgroundExecutor), any())
+        verify(cameraManager).getCameraCharacteristics(configuredId)
+        verify(cameraManager, never()).getCameraCharacteristics(fallbackId)
     }
 
     @Test

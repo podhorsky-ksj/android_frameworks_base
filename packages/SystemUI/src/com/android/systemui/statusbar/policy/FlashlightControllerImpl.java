@@ -17,6 +17,7 @@
 package com.android.systemui.statusbar.policy;
 
 import android.annotation.WorkerThread;
+import android.content.res.Resources;
 import android.content.pm.PackageManager;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -32,7 +33,9 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.systemui.broadcast.BroadcastSender;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
+import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.res.R;
 import com.android.systemui.util.settings.SecureSettings;
 
 import java.io.PrintWriter;
@@ -65,6 +68,7 @@ public class FlashlightControllerImpl implements FlashlightController {
     private final SecureSettings mSecureSettings;
     private final DumpManager mDumpManager;
     private final BroadcastSender mBroadcastSender;
+    private final Resources mResources;
 
     private final boolean mHasFlashlight;
 
@@ -86,7 +90,8 @@ public class FlashlightControllerImpl implements FlashlightController {
             @Background Executor bgExecutor,
             SecureSettings secureSettings,
             BroadcastSender broadcastSender,
-            PackageManager packageManager
+            PackageManager packageManager,
+            @Main Resources resources
     ) {
         mCameraManager = cameraManager;
         mExecutor = bgExecutor;
@@ -94,6 +99,7 @@ public class FlashlightControllerImpl implements FlashlightController {
         mSecureSettings = secureSettings;
         mDumpManager = dumpManager;
         mBroadcastSender = broadcastSender;
+        mResources = resources;
 
         mHasFlashlight = packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH);
         init();
@@ -176,16 +182,34 @@ public class FlashlightControllerImpl implements FlashlightController {
     @WorkerThread
     private String getCameraId() throws CameraAccessException {
         String[] ids = mCameraManager.getCameraIdList();
+
+        String configuredCameraId = mResources.getString(R.string.config_flashlight_camera_id);
+        if (!TextUtils.isEmpty(configuredCameraId)) {
+            for (String id : ids) {
+                if (TextUtils.equals(configuredCameraId, id)) {
+                    if (isBackFlashCamera(id)) {
+                        return id;
+                    }
+                    Log.w(TAG, "Configured flashlight camera is not a rear flash camera: " + id);
+                    break;
+                }
+            }
+        }
+
         for (String id : ids) {
-            CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
-            Boolean flashAvailable = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
-            Integer lensFacing = c.get(CameraCharacteristics.LENS_FACING);
-            if (flashAvailable != null && flashAvailable
-                    && lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_BACK) {
+            if (isBackFlashCamera(id)) {
                 return id;
             }
         }
         return null;
+    }
+
+    private boolean isBackFlashCamera(String id) throws CameraAccessException {
+        CameraCharacteristics c = mCameraManager.getCameraCharacteristics(id);
+        Boolean flashAvailable = c.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
+        Integer lensFacing = c.get(CameraCharacteristics.LENS_FACING);
+        return flashAvailable != null && flashAvailable
+                && lensFacing != null && lensFacing == CameraCharacteristics.LENS_FACING_BACK;
     }
 
     private void dispatchModeChanged(boolean enabled) {

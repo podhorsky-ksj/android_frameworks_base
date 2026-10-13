@@ -72,7 +72,7 @@ class FlashlightTileUserActionInteractorTest : SysuiTestCase() {
 
     @EnableFlags(com.android.systemui.Flags.FLAG_FLASHLIGHT_STRENGTH)
     @Test
-    fun flagOn_handleClickToEnable_whenBinary_doesNothing() =
+    fun flagOn_handleClickToEnable_whenBinary_togglesState() =
         kosmos.runTest {
             assumeFalse(ActivityManager.isUserAMonkey())
             val state by collectLastValue(flashlightInteractor.state)
@@ -88,7 +88,7 @@ class FlashlightTileUserActionInteractorTest : SysuiTestCase() {
 
             underTest.handleInput(click(FlashlightModel.Available.Binary(false)))
 
-            assertThat(state).isEqualTo(FlashlightModel.Available.Binary(false))
+            assertThat(state).isEqualTo(FlashlightModel.Available.Binary(true))
             verify(mockFlashlightDialogDelegate, never()).showDialog()
         }
 
@@ -130,7 +130,7 @@ class FlashlightTileUserActionInteractorTest : SysuiTestCase() {
 
     @EnableFlags(com.android.systemui.Flags.FLAG_FLASHLIGHT_STRENGTH)
     @Test
-    fun flagOn_handleClickWhenEnabled_whenBinary_doesNothing() =
+    fun flagOn_handleClickWhenEnabled_whenBinary_togglesState() =
         kosmos.runTest {
             assumeFalse(ActivityManager.isUserAMonkey())
             val state by collectLastValue(flashlightInteractor.state)
@@ -150,7 +150,7 @@ class FlashlightTileUserActionInteractorTest : SysuiTestCase() {
             // at this point the stage is set for the actual test
             underTest.handleInput(click(enabledBinaryFlashlight))
 
-            assertThat(state).isEqualTo(enabledBinaryFlashlight)
+            assertThat(state).isEqualTo(FlashlightModel.Available.Binary(false))
             verify(mockFlashlightDialogDelegate, never()).showDialog()
         }
 

@@ -52,6 +52,11 @@
 
     <bool name="config_dead_zone_flash">false</bool>
 
+    <!-- Optional camera ID to prefer for the SystemUI flashlight. An empty value keeps the
+         normal camera manager ordering. This is useful on devices whose torch callbacks are
+         reported for a different rear camera ID than the first flash-capable camera. -->
+    <string name="config_flashlight_camera_id" translatable="false"></string>
+
     <!-- Whether to enable dimming navigation buttons when wallpaper is not visible, should be
          enabled for OLED devices to reduce/prevent burn in on the navigation bar (because of the
          black background and static button placements) and disabled for all other devices to

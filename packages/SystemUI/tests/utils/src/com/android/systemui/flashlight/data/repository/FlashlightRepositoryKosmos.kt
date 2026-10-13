@@ -18,6 +18,7 @@ package com.android.systemui.flashlight.data.repository
 
 import android.content.packageManager
 import android.content.pm.PackageManager
+import android.content.res.mainResources
 import com.android.systemui.camera.cameraManager
 import com.android.systemui.dump.dumpManager
 import com.android.systemui.flashlight.shared.logger.flashlightLogger
@@ -38,6 +39,7 @@ val Kosmos.flashlightRepository: FlashlightRepositoryImpl by
             cameraManager,
             dumpManager,
             packageManager,
+            mainResources,
             flashlightLogger,
             userRepository,
         )

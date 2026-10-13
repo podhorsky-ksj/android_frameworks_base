@@ -17,14 +17,17 @@
 package com.android.systemui.flashlight.data.repository
 
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraManager.TorchCallback
 import android.provider.Settings
 import com.android.systemui.CoreStartable
+import com.android.systemui.res.R
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Background
+import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.dump.DumpManager
 import com.android.systemui.flashlight.flags.FlashlightStrength
 import com.android.systemui.flashlight.shared.logger.FlashlightLogger
@@ -89,6 +92,7 @@ constructor(
     private val cameraManager: CameraManager,
     private val dumpManager: DumpManager,
     private val packageManager: PackageManager,
+    @Main private val resources: Resources,
     private val logger: FlashlightLogger,
     private val userRepo: UserRepository,
 ) : FlashlightRepository, CoreStartable {
@@ -119,6 +123,12 @@ constructor(
     private var _deviceSupportsFlashlight = false
 
     private val defaultEnabledLevelForUser = ConcurrentHashMap<Int, Int>()
+
+    private val configuredCameraId: String?
+        get() =
+            resources
+                .getString(R.string.config_flashlight_camera_id)
+                .takeIf { it.isNotBlank() }
 
     override fun start() {
         if (FlashlightStrength.isUnexpectedlyInLegacyMode()) {
@@ -192,8 +202,18 @@ constructor(
      * @return the id of a connected camera that has flashlight, or null if none connected.
      * @throws CameraAccessException if the camera device have been disconnected
      */
-    private suspend fun loadFlashlightInfo(): String? =
-        cameraManager.cameraIdList.firstOrNull { id ->
+    private suspend fun loadFlashlightInfo(): String? {
+        val cameraIds = cameraManager.cameraIdList
+        val preferredCameraId = configuredCameraId
+        val cameraIdsInPreferenceOrder =
+            if (preferredCameraId != null && preferredCameraId in cameraIds) {
+                sequenceOf(preferredCameraId) +
+                    cameraIds.asSequence().filter { it != preferredCameraId }
+            } else {
+                cameraIds.asSequence()
+            }
+
+        return cameraIdsInPreferenceOrder.firstOrNull { id ->
             val cc: CameraCharacteristics = cameraManager.getCameraCharacteristics(id)
 
             val flashAvailable = cc.get(CameraCharacteristics.FLASH_INFO_AVAILABLE)
@@ -216,6 +236,7 @@ constructor(
 
             backFlashlightAvailable
         }
+    }
 
     /**
      * Should be started if and only if device supports flashlight.

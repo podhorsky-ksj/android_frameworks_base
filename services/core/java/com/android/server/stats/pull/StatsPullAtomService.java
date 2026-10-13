@@ -289,6 +289,21 @@ import java.util.function.Function;
  * @hide
  */
 public class StatsPullAtomService extends SystemService {
+    /**
+     * Some legacy devices expose a GPU-memory BPF map whose layout is not
+     * compatible with the Android 16 reader. Querying it aborts system_server
+     * in libmeminfo, so affected products can disable only this telemetry.
+     */
+    private static final boolean DISABLE_GPU_MEMORY_STATS =
+            "whyred".equals(SystemProperties.get("ro.product.device"));
+
+    /**
+     * Whyred's 4.19 kernel does not provide the ION/dma-buf procfs and sysfs
+     * interfaces required by these process-level memory pullers.
+     */
+    private static final boolean DISABLE_ION_DMABUF_MEMORY_STATS =
+            "whyred".equals(SystemProperties.get("ro.product.device"));
+
     private static final String TAG = "StatsPullAtomService";
     private static final boolean DEBUG = false;
 
@@ -2573,11 +2588,14 @@ public class StatsPullAtomService extends SystemService {
         List<ProcessMemoryState> managedProcessList =
                 LocalServices.getService(ActivityManagerInternal.class)
                         .getMemoryStateForProcesses();
-        KernelAllocationStats.ProcessGpuMem[] gpuAllocations =
-                KernelAllocationStats.getGpuAllocations();
-        SparseIntArray gpuMemPerPid = new SparseIntArray(gpuAllocations.length);
-        for (KernelAllocationStats.ProcessGpuMem processGpuMem : gpuAllocations) {
-            gpuMemPerPid.put(processGpuMem.pid, processGpuMem.gpuMemoryKb);
+        SparseIntArray gpuMemPerPid = new SparseIntArray();
+        if (!DISABLE_GPU_MEMORY_STATS) {
+            KernelAllocationStats.ProcessGpuMem[] gpuAllocations =
+                    KernelAllocationStats.getGpuAllocations();
+            gpuMemPerPid = new SparseIntArray(gpuAllocations.length);
+            for (KernelAllocationStats.ProcessGpuMem processGpuMem : gpuAllocations) {
+                gpuMemPerPid.put(processGpuMem.pid, processGpuMem.gpuMemoryKb);
+            }
         }
         for (ProcessMemoryState managedProcess : managedProcessList) {
             final MemorySnapshot snapshot = readMemorySnapshotFromProcfs(managedProcess.pid);
@@ -2675,6 +2693,9 @@ public class StatsPullAtomService extends SystemService {
     }
 
     private void registerProcessSystemIonHeapSize() {
+        if (DISABLE_ION_DMABUF_MEMORY_STATS) {
+            return;
+        }
         int tagId = FrameworkStatsLog.PROCESS_SYSTEM_ION_HEAP_SIZE;
         mStatsManager.setPullAtomCallback(
                 tagId,
@@ -2685,6 +2706,9 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullProcessSystemIonHeapSizeLocked(int atomTag, List<StatsEvent> pulledData) {
+        if (DISABLE_ION_DMABUF_MEMORY_STATS) {
+            return StatsManager.PULL_SKIP;
+        }
         List<IonAllocations> result = readProcessSystemIonHeapSizesFromDebugfs();
         for (IonAllocations allocations : result) {
             pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, getUidForPid(allocations.pid),
@@ -2696,6 +2720,9 @@ public class StatsPullAtomService extends SystemService {
     }
 
     private void registerProcessDmabufMemory() {
+        if (DISABLE_ION_DMABUF_MEMORY_STATS) {
+            return;
+        }
         int tagId = FrameworkStatsLog.PROCESS_DMABUF_MEMORY;
         mStatsManager.setPullAtomCallback(
                 tagId,
@@ -2706,6 +2733,9 @@ public class StatsPullAtomService extends SystemService {
     }
 
     int pullProcessDmabufMemory(int atomTag, List<StatsEvent> pulledData) {
+        if (DISABLE_ION_DMABUF_MEMORY_STATS) {
+            return StatsManager.PULL_SKIP;
+        }
         KernelAllocationStats.ProcessDmabuf[] procBufs =
                 KernelAllocationStats.getDmabufAllocations();
 
